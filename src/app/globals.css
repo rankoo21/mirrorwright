@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* A near-black room lit only by the glass. */
+  --room-black: #060607;
+  --obsidian: #0e0f12;
+  --mercury: #c7cdd4;
+  --breath-white: #eff4f8;
+  --smoke: #4a4e55;
+  --teal-shadow: #14242a;
+  --ember: #e8a36a;
+  --violet-glass: #2a2336;
+}
+
+html,
+body {
+  background: var(--room-black);
+  color: var(--mercury);
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* The dark room: a deep vignette with the faintest cold light at center, as if
+   a single mirror is the only source. */
+.room-vignette {
+  background:
+    radial-gradient(120% 90% at 50% 38%, rgba(199, 205, 212, 0.07) 0%, rgba(20, 36, 42, 0.05) 26%, transparent 60%),
+    radial-gradient(140% 120% at 50% 50%, transparent 40%, rgba(6, 6, 7, 0.7) 100%),
+    var(--room-black);
+}
+
+/* Faint dust in a dark room. */
+.room-dust {
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(199, 205, 212, 0.25), transparent),
+    radial-gradient(1px 1px at 70% 60%, rgba(199, 205, 212, 0.18), transparent),
+    radial-gradient(1px 1px at 40% 80%, rgba(199, 205, 212, 0.14), transparent),
+    radial-gradient(1px 1px at 85% 20%, rgba(199, 205, 212, 0.2), transparent),
+    radial-gradient(1px 1px at 55% 45%, rgba(199, 205, 212, 0.12), transparent);
+  background-size: 380px 380px, 520px 520px, 460px 460px, 600px 600px, 340px 340px;
+}
+
+/* Etched text: thin, cold, as if scratched into silvered glass. */
+.etched {
+  color: var(--mercury);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  opacity: 0.66;
+}
+
+.etched-line {
+  font-family: var(--font-display), Georgia, serif;
+  color: var(--breath-white);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 18px rgba(199, 205, 212, 0.18);
+}
+
+/* The twin's own voice, marked with rare ember warmth (and never by color
+   alone; position and labels also carry the meaning). */
+.voice-ember {
+  color: var(--ember);
+  text-shadow: 0 0 22px rgba(232, 163, 106, 0.28);
+}
+
+/* The thin silver mirror frame. */
+.silver-frame {
+  border: 1px solid rgba(199, 205, 212, 0.16);
+  box-shadow:
+    inset 0 0 60px rgba(20, 36, 42, 0.5),
+    inset 0 0 1px rgba(239, 244, 248, 0.4),
+    0 0 80px rgba(0, 0, 0, 0.6);
+}
+
+/* The reflective surface itself: cold mercury sheen with a faint violet tint. */
+.glass-surface {
+  background:
+    linear-gradient(160deg, rgba(42, 35, 54, 0.28) 0%, rgba(14, 15, 18, 0.6) 38%, rgba(20, 36, 42, 0.35) 100%),
+    radial-gradient(80% 60% at 50% 30%, rgba(199, 205, 212, 0.08), transparent 70%);
+  backdrop-filter: blur(2px);
+}
+
+/* Breath fog overlay that drifts across the glass at idle. */
+.breath-fog {
+  background: radial-gradient(60% 40% at 50% 45%, rgba(239, 244, 248, 0.14), transparent 70%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* The writing slit glow at the base of the mirror. */
+.slit-glow {
+  box-shadow:
+    0 0 24px rgba(199, 205, 212, 0.3),
+    0 0 60px rgba(141, 220, 255, 0.12);
+}
+
+/* Custom thin scrollbar for The Depths pool. */
+.pool-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.pool-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pool-scroll::-webkit-scrollbar-thumb {
+  background: rgba(199, 205, 212, 0.16);
+  border-radius: 999px;
+}
+
+/* Focus states for accessibility against dark glass. */
+*:focus-visible {
+  outline: 2px solid rgba(141, 220, 255, 0.7);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* A shard of text drifting behind the glass. */
+.shard {
+  font-family: var(--font-display), Georgia, serif;
+  color: var(--mercury);
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.08s !important;
+  }
+}
