@@ -4,7 +4,7 @@
 
 A mirror learning to be you.
 
-[![Network](https://img.shields.io/badge/Network-GenLayer_Bradbury-14242A?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com/address/0x5397CB6354459e1e56d72e16859da19fDbBFfBBc)
+[![Network](https://img.shields.io/badge/Network-GenLayer_Bradbury-14242A?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com/address/0xB59BB1f755807E3c6e8dB8f81816d22AB7b0102a)
 [![chainId](https://img.shields.io/badge/chainId-4221-1F2A30?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com)
 [![Status](https://img.shields.io/badge/Status-live-2E7D5B?style=flat-square&labelColor=060607)](https://mirrorwright.pages.dev)
 [![Contract](https://img.shields.io/badge/Contract-Python_GenVM-E8A36A?style=flat-square&labelColor=060607)](contracts/MirrorwrightContract.py)
@@ -16,7 +16,7 @@ A mirror learning to be you.
 
 Every state change is a real transaction on GenLayer Testnet Bradbury. The contract is deployed and the full lifecycle below has been verified on-chain.
 
-- **Contract:** [`0x5397CB6354459e1e56d72e16859da19fDbBFfBBc`](https://explorer-bradbury.genlayer.com/address/0x5397CB6354459e1e56d72e16859da19fDbBFfBBc)
+- **Contract:** [`0xB59BB1f755807E3c6e8dB8f81816d22AB7b0102a`](https://explorer-bradbury.genlayer.com/address/0xB59BB1f755807E3c6e8dB8f81816d22AB7b0102a)
 - **Live app:** [mirrorwright.pages.dev](https://mirrorwright.pages.dev)
 
 ### Verified lifecycle on Bradbury
@@ -88,7 +88,7 @@ To point the frontend at the deployed contract instead of the mock adapter, set 
 
 ```bash
 NEXT_PUBLIC_MIRROR_MODE=contract
-NEXT_PUBLIC_MIRROR_CONTRACT=0x5397CB6354459e1e56d72e16859da19fDbBFfBBc
+NEXT_PUBLIC_MIRROR_CONTRACT=0xB59BB1f755807E3c6e8dB8f81816d22AB7b0102a
 NEXT_PUBLIC_MIRROR_NETWORK=bradbury
 ```
 

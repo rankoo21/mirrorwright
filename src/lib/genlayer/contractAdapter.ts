@@ -1,4 +1,4 @@
-import { createClient } from "genlayer-js";
+import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
 import { studionet, testnetBradbury, localnet } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
 import type {
@@ -23,11 +23,15 @@ import type {
 //   2. Set NEXT_PUBLIC_MIRROR_MODE=contract and NEXT_PUBLIC_MIRROR_CONTRACT=0x...
 //   3. Optionally set NEXT_PUBLIC_MIRROR_NETWORK (studionet | bradbury | localnet).
 //
-// Identity model: reads are open to everyone through a read-only client that
-// carries no account, so the room is never a blank screen. Writing requires the
-// visitor to connect their own browser wallet (MetaMask with the GenLayer Snap).
-// There is no burner self and no key is ever generated or bundled. The deploy
-// key in .env.deploy is server-side only.
+// Identity model: reads are open to everyone through a read-only client. That
+// client still needs an account attached, because genlayer-js throws
+// "No account set. Configure the client with an account or pass an account to
+// this function." when readContract is called with no account. For reads we
+// attach a throwaway ephemeral account (a freshly generated key that never
+// signs a write and is never persisted), so viewing existing reflections never
+// requires a wallet and never hits the account error. Writing still requires
+// the visitor to connect their own browser wallet (MetaMask with the GenLayer
+// Snap). The deploy key in .env.deploy is server-side only.
 
 type AnyClient = ReturnType<typeof createClient>;
 
@@ -95,11 +99,15 @@ export class ContractAdapter implements MirrorAdapter {
 
   // -- identity --------------------------------------------------------
 
-  // Read-only client with no account. Reads (view calls) work with no wallet
-  // connected, so viewing existing reflections never requires an identity.
+  // Read-only client. It carries a throwaway ephemeral account so view calls
+  // never trip genlayer-js's "No account set" error. This account only exists
+  // to satisfy the client; it never signs a write and is never stored. If a
+  // wallet is connected we reuse that client so reads share the same account.
   private getReadClient(): AnyClient {
+    if (this.usingWallet && this.client) return this.client;
     if (this.readClient) return this.readClient;
-    this.readClient = createClient({ chain: this.chain }) as AnyClient;
+    const account = createAccount(generatePrivateKey());
+    this.readClient = createClient({ chain: this.chain, account }) as AnyClient;
     return this.readClient;
   }
 

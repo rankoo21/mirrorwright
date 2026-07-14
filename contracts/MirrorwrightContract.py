@@ -55,6 +55,11 @@ CLARITY_MAX = 100
 COHERENCE_STRONG = 60
 COHERENCE_WEAK = 25
 
+# An answer below this confidence is too unsure to become canonical. Validators
+# disagree on it and the deterministic guard refuses to persist it, so a
+# low-confidence answer is never stored.
+ANSWER_MIN_CONFIDENCE = 60
+
 MAX_FRAGMENT_LEN = 600
 MAX_QUESTION_LEN = 400
 MAX_FIELD_LEN = 300
@@ -113,6 +118,59 @@ def _token_set(text: str) -> set:
     for ch in text.lower():
         cleaned.append(ch if ch.isalnum() else " ")
     return set(w for w in "".join(cleaned).split() if len(w) > 3)
+
+
+def _phrase_agrees(a: str, b: str) -> bool:
+    """Two short persona phrases (tone, cadence) agree in substance.
+
+    This is comparative, never byte-equality: it passes when both nodes are
+    empty, or when their meaningful word sets overlap. It fails when one node
+    filled a state-driving field the other left empty, or when the two phrases
+    share no meaningful words (the nodes described a different voice).
+    """
+    a = (a or "").strip().lower()
+    b = (b or "").strip().lower()
+    if not a and not b:
+        return True
+    if bool(a) != bool(b):
+        return False
+    if a == b:
+        return True
+    ta = _token_set(a)
+    tb = _token_set(b)
+    # Very short phrases (all stopword-length words) fall back to equality,
+    # which we already checked above.
+    if not ta and not tb:
+        return a == b
+    if not ta or not tb:
+        return False
+    return len(ta & tb) > 0
+
+
+def _lists_agree(a, b, min_overlap: int = 1) -> bool:
+    """Two lists of short trait/theme strings agree in substance.
+
+    Compared as sets by meaningful-word overlap, never as ordered byte-equal
+    lists. Passes when both are empty, or when their combined word sets share
+    at least ``min_overlap`` words. This makes the persona field updates part of
+    consensus: a node that would write different traits/themes disagrees.
+    """
+    a = a if isinstance(a, list) else []
+    b = b if isinstance(b, list) else []
+    if not a and not b:
+        return True
+    if bool(a) != bool(b):
+        return False
+    ta = set()
+    for item in a:
+        ta |= _token_set(str(item))
+    tb = set()
+    for item in b:
+        tb |= _token_set(str(item))
+    if not ta and not tb:
+        # Both non-empty but wordless (e.g. tiny tokens); compare lowercased.
+        return set(str(x).strip().lower() for x in a) == set(str(x).strip().lower() for x in b)
+    return len(ta & tb) >= min_overlap
 
 
 @allow_storage
@@ -514,28 +572,65 @@ class MirrorwrightContract(gl.Contract):
             }
 
         def validator_fn(leaders_res: gl.vm.Result) -> bool:
+            # Comparative validation on SUBSTANCE, not shape. This validator
+            # re-runs the interpretation and disagrees unless the leader's
+            # decision fields that actually drive stored persona state match its
+            # own within tolerance. A leader that returns a well-formed dict
+            # with the wrong values is rejected before anything is persisted.
             if not isinstance(leaders_res, gl.vm.Return):
                 return False
-            mine = leader_fn()
             theirs = leaders_res.calldata
+            if not isinstance(theirs, dict):
+                return False
+            mine = leader_fn()
 
             my_c = int(mine["coherence"])
             their_c = int(theirs.get("coherence", -1))
             if their_c < 0:
                 return False
-            # Validators must agree on the coherence band (which drives whether
-            # the persona resolves or holds a contradiction) and the two scores
-            # must be reasonably close, so one node cannot rewrite the self.
+            # 1. Coherence bands drive whether the persona resolves or holds a
+            # contradiction; both bands must agree and the scores stay close.
             if (my_c >= COHERENCE_STRONG) != (their_c >= COHERENCE_STRONG):
                 return False
             if (my_c >= COHERENCE_WEAK) != (their_c >= COHERENCE_WEAK):
                 return False
             if abs(my_c - their_c) > 25:
                 return False
-            # They must agree on whether this contradicts the persona.
-            my_contra = mine["relation"] == RELATION_CONTRADICTS
-            their_contra = str(theirs.get("relation", "")) == RELATION_CONTRADICTS
-            if my_contra != their_contra:
+
+            # 2. Relation must agree exactly. This is the field that decides
+            # coheres/extends/contradicts, which routes the whole state update.
+            my_rel = str(mine["relation"])
+            their_rel = str(theirs.get("relation", ""))
+            if my_rel != their_rel:
+                return False
+
+            my_contra = my_rel == RELATION_CONTRADICTS
+            their_contra = their_rel == RELATION_CONTRADICTS
+
+            if my_contra:
+                # For a contradiction, the named opposed trait must agree so
+                # both nodes hold (or refuse) the same shard.
+                if not _phrase_agrees(str(mine.get("opposes", "")), str(theirs.get("opposes", ""))):
+                    return False
+                # And they must name substantially the same contradicting trait.
+                if not _lists_agree(mine.get("traits", []), theirs.get("traits", [])):
+                    return False
+                return True
+
+            # 3. For a coherent/extending fragment, the persona field updates
+            # that get written to state must agree in substance: tone, cadence,
+            # and the trait/theme/anchor changes. A node that would rewrite the
+            # voice differently disagrees, so the fingerprint only changes on
+            # genuine consensus.
+            if not _phrase_agrees(str(mine.get("tone", "")), str(theirs.get("tone", ""))):
+                return False
+            if not _phrase_agrees(str(mine.get("cadence", "")), str(theirs.get("cadence", ""))):
+                return False
+            if not _lists_agree(mine.get("traits", []), theirs.get("traits", [])):
+                return False
+            if not _lists_agree(mine.get("themes", []), theirs.get("themes", [])):
+                return False
+            if not _lists_agree(mine.get("anchors", []), theirs.get("anchors", [])):
                 return False
             return True
 
@@ -716,27 +811,62 @@ class MirrorwrightContract(gl.Contract):
                 "confidence": confidence,
             }
 
+        # Deterministic faithfulness fingerprint: the set of persona words an
+        # answer must plausibly draw on to count as spoken in this voice. Built
+        # once here so both the leader gate and the validator judge against the
+        # same stored persona, not against the model's own invention.
+        persona_tokens = set()
+        persona_tokens |= _token_set(persona.tone or "")
+        persona_tokens |= _token_set(persona.cadence or "")
+        for item in locked + themes + anchors:
+            persona_tokens |= _token_set(str(item))
+
+        def _faithful_to_persona(cand: dict) -> bool:
+            # An answer is faithful when it leans on at least one stored persona
+            # trait/theme (drawn_from is already filtered to locked|themes in
+            # leader_fn) OR when its stance/answer shares vocabulary with the
+            # stored fingerprint. This rejects a generic assistant answer that
+            # ignores the persona entirely.
+            if cand.get("drawn_from"):
+                return True
+            if not persona_tokens:
+                return True
+            spoken = _token_set(str(cand.get("stance", ""))) | _token_set(str(cand.get("answer", "")))
+            return len(spoken & persona_tokens) > 0
+
         def validator_fn(leaders_res: gl.vm.Result) -> bool:
+            # Comparative validation on SUBSTANCE. The validator re-runs the
+            # answer and judges faithfulness to the STORED persona, then
+            # disagrees on low-confidence or unfaithful answers so they are
+            # never persisted. Never byte-equality on prose (it would never
+            # reproduce); never schema-only acceptance.
             if not isinstance(leaders_res, gl.vm.Return):
                 return False
-            mine = leader_fn()
             theirs = leaders_res.calldata
+            if not isinstance(theirs, dict):
+                return False
+            mine = leader_fn()
 
             my_conf = int(mine["confidence"])
             their_conf = int(theirs.get("confidence", -1))
             if their_conf < 0:
                 return False
-            # Faithfulness band must agree, and confidences must be close. This
-            # is comparative validation on the decision field, never byte
-            # equality on the prose, which would never reproduce.
+            # 1. Confidence gate: an unsure answer is rejected outright so it is
+            # not stored, regardless of node agreement.
+            if my_conf < ANSWER_MIN_CONFIDENCE or their_conf < ANSWER_MIN_CONFIDENCE:
+                return False
+            # 2. Faithfulness gate: the answer must actually match the stored
+            # persona fingerprint (voice/stance), not a generic voice.
+            if not _faithful_to_persona(mine) or not _faithful_to_persona(theirs):
+                return False
+            # 3. Faithfulness band must agree and confidences stay close.
             if (my_conf >= COHERENCE_STRONG) != (their_conf >= COHERENCE_STRONG):
                 return False
             if abs(my_conf - their_conf) > 30:
                 return False
-            # Stance words should overlap so two nodes took the same position.
-            my_stance = set(_token_set(mine["stance"]))
-            their_stance = set(_token_set(str(theirs.get("stance", ""))))
-            if my_stance and their_stance and len(my_stance & their_stance) == 0:
+            # 4. Stance must agree in substance so two nodes took the same
+            # position. Empty-vs-filled stance is a disagreement.
+            if not _phrase_agrees(str(mine.get("stance", "")), str(theirs.get("stance", ""))):
                 return False
             return True
 
@@ -744,6 +874,19 @@ class MirrorwrightContract(gl.Contract):
 
         confidence = int(agreed.get("confidence", 0))
         faithful = confidence >= COHERENCE_STRONG
+
+        # Deterministic backstop mirroring the validator gates: even if the
+        # nondet block resolved, a low-confidence or unfaithful leader answer is
+        # refused here so it is NOT persisted. The reflection stays silent
+        # rather than speak an answer it cannot stand behind.
+        if confidence < ANSWER_MIN_CONFIDENCE:
+            raise gl.vm.UserError(
+                f"{ERROR_EXPECTED} The reflection was too unsure to answer faithfully."
+            )
+        if not _faithful_to_persona(agreed):
+            raise gl.vm.UserError(
+                f"{ERROR_EXPECTED} That answer did not match your voice; it was not kept."
+            )
 
         index = int(self.answer_count)
         answer_id = "answer_" + str(index)
@@ -834,18 +977,30 @@ class MirrorwrightContract(gl.Contract):
             }
 
         def validator_fn(leaders_res: gl.vm.Result) -> bool:
+            # Comparative validation on substance. The corrected trait rewrites
+            # the locked core, so validators must agree both that the correction
+            # coheres AND on the replacement trait itself, never on shape alone.
             if not isinstance(leaders_res, gl.vm.Return):
                 return False
-            mine = leader_fn()
             theirs = leaders_res.calldata
+            if not isinstance(theirs, dict):
+                return False
+            mine = leader_fn()
             my_c = int(mine["coherence"])
             their_c = int(theirs.get("coherence", -1))
             if their_c < 0:
                 return False
+            # Coherence band (accept/refuse) must agree and scores stay close.
             if (my_c >= COHERENCE_WEAK) != (their_c >= COHERENCE_WEAK):
                 return False
             if abs(my_c - their_c) > 30:
                 return False
+            # When the correction is accepted, the new trait that will lock into
+            # the persona must agree in substance so one node cannot install a
+            # different trait than its peers judged.
+            if my_c >= COHERENCE_WEAK:
+                if not _phrase_agrees(str(mine.get("new_trait", "")), str(theirs.get("new_trait", ""))):
+                    return False
             return True
 
         agreed = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)

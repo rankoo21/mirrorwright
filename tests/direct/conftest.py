@@ -95,6 +95,37 @@ def answer_response(confidence=85, stance="ask what they fear first",
     )
 
 
+def low_confidence_answer_response(confidence=30):
+    """A hedged, unsure answer. Must be rejected before it is ever stored."""
+    return json.dumps(
+        {
+            "answer": "I am honestly not sure; it could go either way.",
+            "stance": "uncertain, could go either way",
+            "drawn_from": [],
+            "held_back": "everything about this",
+            "confidence": confidence,
+        }
+    )
+
+
+def unfaithful_answer_response(confidence=90):
+    """A confident but generic answer that ignores the stored persona.
+
+    High confidence, but it draws on nothing from the fingerprint and shares no
+    vocabulary with the stored tone/cadence/traits. The faithfulness gate must
+    reject it so a voice that is not the owner's is never persisted.
+    """
+    return json.dumps(
+        {
+            "answer": "Just optimize your quarterly metrics and iterate on the roadmap.",
+            "stance": "maximize quarterly output",
+            "drawn_from": [],
+            "held_back": "",
+            "confidence": confidence,
+        }
+    )
+
+
 def correction_response(coherence=80, new_trait="gives careful, unhurried answers"):
     return json.dumps({"coherence": coherence, "new_trait": new_trait})
 
