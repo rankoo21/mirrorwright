@@ -4,7 +4,7 @@
 
 A mirror learning to be you.
 
-[![Network](https://img.shields.io/badge/Network-GenLayer_Bradbury-14242A?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com/address/0xE7c2Ea7b3eA4D1DD883aDa90dE48b6f1037CB6AB)
+[![Network](https://img.shields.io/badge/Network-GenLayer_Bradbury-14242A?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com/address/0x4417Fac7a6C6258EeBfe6C66c4d0E0E4d4D3d965)
 [![chainId](https://img.shields.io/badge/chainId-4221-1F2A30?style=flat-square&labelColor=060607)](https://explorer-bradbury.genlayer.com)
 [![Status](https://img.shields.io/badge/Status-live-2E7D5B?style=flat-square&labelColor=060607)](https://mirrorwright.pages.dev)
 [![Contract](https://img.shields.io/badge/Contract-Python_GenVM-E8A36A?style=flat-square&labelColor=060607)](contracts/MirrorwrightContract.py)
@@ -14,20 +14,19 @@ A mirror learning to be you.
 
 ## On-chain proof
 
-Every state change is a real transaction on GenLayer Testnet Bradbury. The contract is deployed and the full lifecycle below has been verified on-chain.
-
-- **Contract:** [`0xE7c2Ea7b3eA4D1DD883aDa90dE48b6f1037CB6AB`](https://explorer-bradbury.genlayer.com/address/0xE7c2Ea7b3eA4D1DD883aDa90dE48b6f1037CB6AB)
+- **Contract:** [`0x4417Fac7a6C6258EeBfe6C66c4d0E0E4d4D3d965`](https://explorer-bradbury.genlayer.com/address/0x4417Fac7a6C6258EeBfe6C66c4d0E0E4d4D3d965)
 - **Live app:** [mirrorwright.pages.dev](https://mirrorwright.pages.dev)
+- **Validation:** `genvm-lint` passes; **23 direct tests pass**.
+- **Persisted state:** 1 mirror, 2 fragments, and 2 answers.
 
-### Verified lifecycle on Bradbury
+| Action | Bradbury proof |
+| --- | --- |
+| Open hardened mirror | [`0x43c5a745...78b3c13d`](https://explorer-bradbury.genlayer.com/tx/0x43c5a7456fa8b7ee9e73c36c0c088b3d2e64c740759e6bfc0159b46178b3c13d) |
+| Persist validated answer | [`0x3f111994...81e6986`](https://explorer-bradbury.genlayer.com/tx/0x3f1119944fe618f23940d9f6dc23068e47830dc65fb2feb5e4640b32081e6986) |
 
-| Step | Method | Transaction |
-| --- | --- | --- |
-| Open the mirror | `open_mirror` | [`0xa6796b06...f168dec4`](https://explorer-bradbury.genlayer.com/tx/0xa6796b069931de79e6e40aa9e8b4f232ab59936a7f6a3ef243d5ed82f168dec4) |
-| Feed a fragment | `feed_fragment` | [`0xaeca1013...20054e12`](https://explorer-bradbury.genlayer.com/tx/0xaeca1013f0126f09decf04638419350501030fb14a3d1956c486978120054e12) |
-| Feed a fragment | `feed_fragment` | [`0x1112399d...00ddcc25`](https://explorer-bradbury.genlayer.com/tx/0x1112399d2cd58115d0aefff19a3e78920aa7e519412aff9e44795ede00ddcc25) |
-| Feed a fragment | `feed_fragment` | [`0x1fbd0cde...d2e03c0e`](https://explorer-bradbury.genlayer.com/tx/0x1fbd0cdedda287e56fe7b2ee137abdd9e159cb7c30eb5ef390e46fa1d2e03c0e) |
-| Ask the mirror | `ask` | [`0xd64d1100...660324be5`](https://explorer-bradbury.genlayer.com/tx/0xd64d110053ac6a6912a3de6a7b9f743559c6edc279cefdaef2470e9660324be5) |
+### Reviewer remediation
+
+The `ask` path now validates the leader's exact answer instead of comparing two free-form generations. Deterministic faithfulness, confidence, `drawn_from` grounding, and token-stuffing checks run before an independent semantic audit against the stored persona and question. The exact accepted output is rechecked before persistence; low-confidence or unfaithful answers are rejected.
 
 ## What it is
 
@@ -88,7 +87,7 @@ To point the frontend at the deployed contract instead of the mock adapter, set 
 
 ```bash
 NEXT_PUBLIC_MIRROR_MODE=contract
-NEXT_PUBLIC_MIRROR_CONTRACT=0xE7c2Ea7b3eA4D1DD883aDa90dE48b6f1037CB6AB
+NEXT_PUBLIC_MIRROR_CONTRACT=0x4417Fac7a6C6258EeBfe6C66c4d0E0E4d4D3d965
 NEXT_PUBLIC_MIRROR_NETWORK=bradbury
 ```
 

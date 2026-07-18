@@ -7,7 +7,19 @@ from conftest import (
     answer_response,
     low_confidence_answer_response,
     unfaithful_answer_response,
+    token_stuffed_answer_response,
+    audit_response,
 )
+
+
+ANSWER_PAT = r"(?s)^You speak as a specific person.*"
+AUDIT_PAT = r"(?s)^FAITHFULNESS AUDIT.*"
+
+
+def _mock_answer_calls(direct_vm, answer_json, audit_json=None):
+    direct_vm.clear_mocks()
+    direct_vm.mock_llm(AUDIT_PAT, audit_json or audit_response())
+    direct_vm.mock_llm(ANSWER_PAT, answer_json)
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +121,7 @@ def test_ask_answers_in_voice(deploy, direct_vm):
     deploy.feed_fragment(mirror_id, "I slow down and ask what they fear before advising.", "voice", 2000)
     deploy.feed_fragment(mirror_id, "I never give a clean answer; I sit in the question.", "voice", 3000)
 
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", answer_response())
+    _mock_answer_calls(direct_vm, answer_response())
     result = deploy.ask(mirror_id, "How should I make a hard decision?", "0xabc", 4000)
     assert result["answer"] != ""
     assert result["note"] == "It answered in your voice."
@@ -141,8 +152,7 @@ def test_ask_rejects_low_confidence_answer_not_stored(deploy, direct_vm):
     # A hedged, low-confidence leader answer must be refused by the confidence
     # gate and never persisted.
     mirror_id = _build_persona_for_ask(deploy, direct_vm)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", low_confidence_answer_response(confidence=30))
+    _mock_answer_calls(direct_vm, low_confidence_answer_response(confidence=30))
     with direct_vm.expect_revert("too unsure to answer"):
         deploy.ask(mirror_id, "How should I make a hard decision?", "0xabc", 4000)
     answers = deploy.get_answers(mirror_id, 0, 20)
@@ -153,8 +163,7 @@ def test_ask_rejects_unfaithful_answer_not_stored(deploy, direct_vm):
     # A confident answer that ignores the stored persona (generic voice) must be
     # refused by the faithfulness gate and never persisted.
     mirror_id = _build_persona_for_ask(deploy, direct_vm)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", unfaithful_answer_response(confidence=90))
+    _mock_answer_calls(direct_vm, unfaithful_answer_response(confidence=90))
     with direct_vm.expect_revert("did not match your voice"):
         deploy.ask(mirror_id, "How should I make a hard decision?", "0xabc", 4000)
     answers = deploy.get_answers(mirror_id, 0, 20)
@@ -215,8 +224,7 @@ def test_ask_validator_rejects_unfaithful_leader_result(deploy, direct_vm):
     # The validator re-runs a faithful answer (current mock) but is handed an
     # unfaithful peer result; it must disagree.
     mirror_id = _build_persona_for_ask(deploy, direct_vm)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", answer_response())
+    _mock_answer_calls(direct_vm, answer_response())
     deploy.ask(mirror_id, "How should I make a hard decision?", "0xabc", 4000)
     unfaithful = json.loads(unfaithful_answer_response(confidence=90))
     assert direct_vm.run_validator(leader_result=unfaithful) is False
@@ -224,11 +232,32 @@ def test_ask_validator_rejects_unfaithful_leader_result(deploy, direct_vm):
 
 def test_ask_validator_rejects_low_confidence_leader_result(deploy, direct_vm):
     mirror_id = _build_persona_for_ask(deploy, direct_vm)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", answer_response())
+    _mock_answer_calls(direct_vm, answer_response())
     deploy.ask(mirror_id, "How should I make a hard decision?", "0xdef", 4000)
     hedged = json.loads(low_confidence_answer_response(confidence=30))
     assert direct_vm.run_validator(leader_result=hedged) is False
+
+
+def test_ask_validator_rejects_token_stuffed_contradictory_answer(deploy, direct_vm):
+    # One copied persona phrase cannot launder a long contradictory passage.
+    mirror_id = _build_persona_for_ask(deploy, direct_vm)
+    _mock_answer_calls(direct_vm, answer_response())
+    deploy.ask(mirror_id, "How should I make a hard decision?", "0xfeed", 4000)
+    stuffed = json.loads(token_stuffed_answer_response())
+    assert direct_vm.run_validator(leader_result=stuffed) is False
+
+
+def test_ask_validator_rejects_answer_failed_by_independent_audit(deploy, direct_vm):
+    # Even a lexically similar answer is rejected when the independent audit
+    # finds that its exact prose contradicts the stored fingerprint.
+    mirror_id = _build_persona_for_ask(deploy, direct_vm)
+    _mock_answer_calls(
+        direct_vm,
+        answer_response(),
+        audit_response(faithful=True, question_relevant=True, no_contradiction=False),
+    )
+    deploy.ask(mirror_id, "How should I make a hard decision?", "0xa11d", 4000)
+    assert direct_vm.run_validator(leader_result=json.loads(answer_response())) is False
 
 
 # ---------------------------------------------------------------------------
@@ -293,8 +322,7 @@ def test_summary_counts(deploy, direct_vm):
     mirror_id = deploy.open_mirror(1000)
     deploy.feed_fragment(mirror_id, "I slow down and ask what they fear first.", "voice", 2000)
     deploy.feed_fragment(mirror_id, "I never give a clean answer; I hold the question.", "voice", 3000)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm(r".*", answer_response())
+    _mock_answer_calls(direct_vm, answer_response())
     deploy.ask(mirror_id, "What do I do now?", "0x1", 4000)
     summary = deploy.get_summary()
     assert summary["mirrors"] == 1

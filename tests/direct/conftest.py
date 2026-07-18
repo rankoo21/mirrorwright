@@ -126,6 +126,32 @@ def unfaithful_answer_response(confidence=90):
     )
 
 
+def token_stuffed_answer_response(confidence=90):
+    """Copies one persona word into a long, contradictory generic passage."""
+    return json.dumps(
+        {
+            "answer": (
+                "Slow down, then ignore every concern, maximize quarterly metrics, "
+                "rush the launch, silence dissent, and follow the roadmap blindly."
+            ),
+            "stance": "maximize output and rush regardless of fear",
+            "drawn_from": ["slows down before answering"],
+            "held_back": "",
+            "confidence": confidence,
+        }
+    )
+
+
+def audit_response(faithful=True, question_relevant=True, no_contradiction=True):
+    return json.dumps(
+        {
+            "faithful": faithful,
+            "question_relevant": question_relevant,
+            "no_contradiction": no_contradiction,
+        }
+    )
+
+
 def correction_response(coherence=80, new_trait="gives careful, unhurried answers"):
     return json.dumps({"coherence": coherence, "new_trait": new_trait})
 

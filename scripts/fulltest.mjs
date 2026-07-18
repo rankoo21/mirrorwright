@@ -171,6 +171,27 @@ async function main() {
 
   const writeFailures = [];
 
+  const persistedWrite = async (step, fn, argsFactory, summaryKey) => {
+    let lastCount = -1;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const before = await read("get_summary", []);
+      const beforeCount = Number(g(before, summaryKey) ?? 0);
+      await write(`${step} persistence ${attempt}`, fn, argsFactory());
+      const after = await readUntil(
+        "get_summary",
+        [],
+        (s) => Number(g(s, summaryKey) ?? 0) > beforeCount,
+        12,
+        3000,
+      );
+      lastCount = Number(g(after, summaryKey) ?? 0);
+      if (lastCount > beforeCount) return;
+      console.log(`  [${step}] transaction reached consensus but did not persist; retrying.`);
+      await sleep(8000);
+    }
+    throw new Error(`${step} did not persist after 4 consensus attempts (last ${summaryKey}=${lastCount}).`);
+  };
+
   // --- Step 2: open the mirror (idempotent per owner).
   console.log("Step 1/4: open_mirror");
   try {
@@ -210,7 +231,12 @@ async function main() {
     for (let i = 0; i < fragments.length; i += 1) {
       const f = fragments[i];
       try {
-        await write(`feed_fragment #${i + 1}`, "feed_fragment", [mirrorId, f.text, f.kind, Date.now()]);
+        await persistedWrite(
+          `feed_fragment #${i + 1}`,
+          "feed_fragment",
+          () => [mirrorId, f.text, f.kind, Date.now()],
+          "fragments",
+        );
       } catch (e) {
         writeFailures.push({ step: `feed_fragment #${i + 1}`, error: String(e?.message ?? e) });
         console.log(`  FAILED: ${String(e?.message ?? e)}`);
@@ -221,7 +247,12 @@ async function main() {
     // --- Step 4: ask the mirror a question.
     console.log("Step 3/4: ask");
     try {
-      await write("ask", "ask", [mirrorId, "How should I make a decision I am afraid of?", "0xlive", Date.now()]);
+      await persistedWrite(
+        "ask",
+        "ask",
+        () => [mirrorId, "How should I make a decision I am afraid of?", "0xlive", Date.now()],
+        "answers",
+      );
     } catch (e) {
       writeFailures.push({ step: "ask", error: String(e?.message ?? e) });
       console.log(`  FAILED: ${String(e?.message ?? e)}`);
