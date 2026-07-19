@@ -64,6 +64,7 @@ interface MirrorStoreState {
   init: () => Promise<void>;
   breatheOnGlass: () => Promise<void>;
   connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
   setSurface: (mode: SurfaceMode) => void;
   tiltTo: (mode: SurfaceMode) => void;
   feed: (text: string, kind: FragmentKind) => Promise<FeedResult | null>;
@@ -205,6 +206,26 @@ export const useMirrorStore = create<MirrorStoreState>((set, get) => ({
     } finally {
       set({ connecting: false, busy: false, busyLabel: "" });
     }
+  },
+
+  disconnectWallet: () => {
+    const adapter = getAdapter();
+    if (adapter.disconnectWallet) adapter.disconnectWallet();
+    // Drop identity and return to the entry so the user can connect a
+    // different wallet cleanly.
+    set({
+      breathed: false,
+      usingWallet: false,
+      identityAddress: null,
+      mirror: null,
+      fragments: [],
+      answers: [],
+      liveAnswer: null,
+      contestedTrait: null,
+      surface: "dim",
+      notice: null,
+      error: null,
+    });
   },
 
   setSurface: (mode) => set((s) => ({ previousSurface: s.surface, surface: mode })),

@@ -18,6 +18,7 @@ export function Breath() {
   const usingWallet = useMirrorStore((s) => s.usingWallet);
   const mode = useMirrorStore((s) => s.mode);
   const breatheOnGlass = useMirrorStore((s) => s.breatheOnGlass);
+  const disconnectWallet = useMirrorStore((s) => s.disconnectWallet);
 
   const [fogged, setFogged] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,23 +33,32 @@ export function Breath() {
 
   if (breathed) {
     return (
-      <div className="group fixed right-5 top-5 z-40 flex items-center gap-2">
-        {/* A small warm fog mark in the corner. */}
+      <div className="fixed right-5 top-5 z-40 flex items-center gap-3 rounded-full border border-mercury/25 bg-room/70 px-4 py-2 backdrop-blur-sm">
+        {/* A warm fog mark: connected. */}
         <motion.div
-          className="relative h-9 w-9 rounded-full"
+          className="relative h-6 w-6 rounded-full"
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
           style={{
-            background: "radial-gradient(circle at 40% 35%, rgba(232,163,106,0.5), rgba(239,244,248,0.12) 60%, transparent)",
-            boxShadow: "0 0 22px rgba(232,163,106,0.25)",
+            background: "radial-gradient(circle at 40% 35%, rgba(232,163,106,0.7), rgba(239,244,248,0.15) 60%, transparent)",
+            boxShadow: "0 0 18px rgba(232,163,106,0.35)",
           }}
-          aria-label="Connected self"
+          aria-label="Connected"
         />
-        <div className="pointer-events-none translate-x-1 opacity-0 transition-all duration-500 group-hover:translate-x-0 group-hover:opacity-100">
-          <span className="etched normal-case" style={{ letterSpacing: "0.12em" }}>
-            {usingWallet ? "wallet" : "self"} . {shortenAddress(identity) || "unsigned"}
-          </span>
-        </div>
+        <span className="etched normal-case text-sm text-mercury" style={{ letterSpacing: "0.1em" }}>
+          {usingWallet ? "wallet" : "self"} · {shortenAddress(identity) || "unsigned"}
+        </span>
+        {usingWallet && (
+          <button
+            type="button"
+            onClick={disconnectWallet}
+            className="etched normal-case rounded-full border border-mercury/25 px-3 py-1 text-xs text-mercury transition-colors duration-300 hover:border-mercury/50"
+            style={{ letterSpacing: "0.08em" }}
+            aria-label="Disconnect wallet"
+          >
+            disconnect
+          </button>
+        )}
       </div>
     );
   }
