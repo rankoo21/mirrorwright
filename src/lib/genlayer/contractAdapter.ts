@@ -124,29 +124,32 @@ export class ContractAdapter implements MirrorAdapter {
       throw new Error("No browser wallet found. Install MetaMask with the GenLayer Snap to connect.");
     }
 
-    // Get the selected account straight from the injected provider. This is the
-    // reliable source of the address; client.connect activates the GenLayer Snap
-    // for signing but does not always expose the address via getAddresses.
+    // Build a client bound to the injected provider and let client.connect()
+    // drive the whole handshake: it installs/activates the GenLayer Snap and
+    // pops MetaMask for account selection. This mirrors the working Signal
+    // Grove flow. Doing eth_requestAccounts by hand first raced the Snap
+    // handshake and could leave the wallet prompt from ever appearing.
+    const client = createClient({ chain: this.chain, provider: eth }) as AnyClient;
     let addr: string | undefined;
     try {
-      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
-      addr = accounts?.[0];
+      await client.connect(networkName(this.config.network));
+      const addresses = await client.getAddresses().catch(() => [] as string[]);
+      addr = addresses?.[0];
     } catch (e: any) {
       if (e?.code === 4001) throw new Error("Wallet connection was rejected.");
-      throw new Error("Could not reach the browser wallet.");
+      throw new Error(
+        "Could not activate the GenLayer Snap in MetaMask. Approve the connection and Snap install, then try again.",
+      );
     }
 
-    const client = createClient({ chain: this.chain }) as AnyClient;
-    try {
-      await client.connect(networkName(this.config.network));
-      if (!addr) {
-        const addresses = await client.getAddresses().catch(() => [] as string[]);
-        addr = addresses?.[0];
+    // Fallback: some MetaMask states return the address only via the provider.
+    if (!addr) {
+      try {
+        const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
+        addr = accounts?.[0];
+      } catch (e: any) {
+        if (e?.code === 4001) throw new Error("Wallet connection was rejected.");
       }
-    } catch (e) {
-      // The Snap may be unavailable; fall back to the provider account so reads
-      // and provider-signed writes still work.
-      if (!addr) throw new Error("Wallet connected but no account was returned.");
     }
 
     if (!addr) throw new Error("Wallet connected but no account was returned.");
