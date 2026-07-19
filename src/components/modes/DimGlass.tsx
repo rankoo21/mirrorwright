@@ -11,13 +11,15 @@ import { useMirrorStore } from "@/store/useMirrorStore";
 // affordance is to wipe the condensation, which tilts toward The Feeding.
 export function DimGlass() {
   const tiltTo = useMirrorStore((s) => s.tiltTo);
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(1);
+  // The glass now clears on its own so the entry is immediate: the way in is
+  // revealed straight away, and wiping is no longer required to begin.
   const cleared = progress > 0.32;
 
   return (
     <div className="relative flex h-full min-h-[inherit] flex-col items-center justify-center px-8 py-16 text-center">
-      {/* Condensation the user wipes across. */}
-      <Condensation onWipeProgress={setProgress} active={!cleared} />
+      {/* Condensation kept as ambient texture only; it no longer gates entry. */}
+      <Condensation onWipeProgress={setProgress} active={false} />
 
       <div className="relative z-10 flex flex-col items-center gap-6">
         <EtchLine className="text-3xl md:text-5xl">A mirror learning to be you.</EtchLine>
