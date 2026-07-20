@@ -124,34 +124,42 @@ export class ContractAdapter implements MirrorAdapter {
       throw new Error("No browser wallet found. Install MetaMask with the GenLayer Snap to connect.");
     }
 
-    // Build a client bound to the injected provider and let client.connect()
-    // drive the whole handshake: it installs/activates the GenLayer Snap and
-    // pops MetaMask for account selection. This mirrors the working Signal
-    // Grove flow. Doing eth_requestAccounts by hand first raced the Snap
-    // handshake and could leave the wallet prompt from ever appearing.
-    const client = createClient({ chain: this.chain, provider: eth }) as AnyClient;
-    let addr: string | undefined;
+    // 1. Unlock MetaMask first so an account is available for the handshake.
     try {
-      await client.connect(networkName(this.config.network));
-      const addresses = await client.getAddresses().catch(() => [] as string[]);
-      addr = addresses?.[0];
+      await eth.request({ method: "eth_requestAccounts" });
     } catch (e: any) {
       if (e?.code === 4001) throw new Error("Wallet connection was rejected.");
+      throw new Error("Could not reach MetaMask. Unlock it and try again.");
+    }
+
+    // 2. client.connect() drives the GenLayer Snap install/activation and the
+    //    network switch, talking to window.ethereum directly (so no provider is
+    //    passed into createClient). If the Snap step fails, surface MetaMask's
+    //    real reason instead of hiding it.
+    const client = createClient({ chain: this.chain }) as AnyClient;
+    try {
+      await client.connect(networkName(this.config.network));
+    } catch (e: any) {
+      if (e?.code === 4001) throw new Error("The GenLayer Snap connection was rejected in MetaMask.");
+      const detail = String(e?.message ?? e).slice(0, 200);
       throw new Error(
-        "Could not activate the GenLayer Snap in MetaMask. Approve the connection and Snap install, then try again.",
+        "Could not activate the GenLayer Snap in MetaMask. Make sure MetaMask is unlocked and allows Snaps, then approve the install. Details: " +
+          detail,
       );
     }
 
-    // Fallback: some MetaMask states return the address only via the provider.
-    if (!addr) {
-      try {
-        const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
-        addr = accounts?.[0];
-      } catch (e: any) {
-        if (e?.code === 4001) throw new Error("Wallet connection was rejected.");
-      }
+    // 3. Resolve the address via the Snap first, then the provider.
+    let addr: string | undefined;
+    try {
+      const addresses = await client.getAddresses().catch(() => [] as string[]);
+      addr = addresses?.[0];
+    } catch {
+      /* fall through */
     }
-
+    if (!addr) {
+      const accounts: string[] = await eth.request({ method: "eth_accounts" }).catch(() => []);
+      addr = accounts?.[0];
+    }
     if (!addr) throw new Error("Wallet connected but no account was returned.");
 
     this.client = client;
