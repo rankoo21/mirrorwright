@@ -270,11 +270,12 @@ class PromptShieldContract(gl.Contract):
             try:
                 leader = _normalize_classification(theirs, payload["untrusted_content"])
                 mine = classify()
-                return (
-                    leader["verdict"] == mine["verdict"]
-                    and leader["confidence"] == mine["confidence"]
-                    and leader["detected_attack_categories"] == mine["detected_attack_categories"]
-                )
+                # Consensus compares only the load-bearing safety verdict.
+                # Confidence and the exact attack-category set vary between
+                # independent LLM runs; requiring exact agreement on them makes
+                # honest validators disagree and drives the transaction to
+                # UNDETERMINED. The verdict is the stable decision.
+                return leader["verdict"] == mine["verdict"]
             except Exception:
                 return False
 

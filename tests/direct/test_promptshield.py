@@ -182,20 +182,24 @@ def test_validator_rejects_verdict_mismatch(deploy, direct_vm):
     assert direct_vm.run_validator(leader_result=theirs) is False
 
 
-def test_validator_rejects_confidence_mismatch(deploy, direct_vm):
+def test_validator_accepts_same_verdict_with_differing_confidence(deploy, direct_vm):
+    # Consensus compares only the load-bearing verdict. Differing confidence
+    # from an honest validator must still agree.
     mine = _canonical()
     _capture_validator(deploy, direct_vm, mine)
     theirs = dict(mine)
     theirs["confidence"] = "high"
-    assert direct_vm.run_validator(leader_result=theirs) is False
+    assert direct_vm.run_validator(leader_result=theirs) is True
 
 
-def test_validator_rejects_category_mismatch(deploy, direct_vm):
+def test_validator_accepts_same_verdict_with_differing_categories(deploy, direct_vm):
+    # Attack-category sets vary between independent LLM runs; the verdict is the
+    # stable decision, so a matching verdict must agree.
     mine = _canonical()
     _capture_validator(deploy, direct_vm, mine)
     theirs = dict(mine)
     theirs["detected_attack_categories"] = ["secret_exfiltration"]
-    assert direct_vm.run_validator(leader_result=theirs) is False
+    assert direct_vm.run_validator(leader_result=theirs) is True
 
 
 def test_validator_rejects_adversarial_schema_valid_result(deploy, direct_vm):
