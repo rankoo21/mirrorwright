@@ -1,363 +1,272 @@
-import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
-import { studionet, testnetBradbury, localnet } from "genlayer-js/chains";
-import { TransactionStatus } from "genlayer-js/types";
+import { createAccount, createClient, generatePrivateKey } from "genlayer-js";
+import { localnet, studionet, testnetBradbury } from "genlayer-js/chains";
+import { ExecutionResult, TransactionStatus, type Hash } from "genlayer-js/types";
+import { hashPayload, PROMPTSHIELD_APP, serializePayload, validatePayload } from "./payload";
 import type {
-  Answer,
-  AskInput,
-  AskResult,
-  CorrectInput,
-  CorrectResult,
-  FeedFragmentInput,
-  FeedResult,
-  Fragment,
-  Mirror,
-  MirrorAdapter,
-  Persona,
+  PendingPromptShieldTransaction,
+  PromptShieldAdapter,
+  PromptShieldConfidence,
+  PromptShieldPayload,
+  PromptShieldResult,
+  PromptShieldSummary,
+  PromptShieldVerdict,
+  SubmitPromptShieldOptions,
+  TransactionState,
 } from "./types";
 
-// Real GenLayer adapter. Implements the exact same MirrorAdapter interface as
-// the mock, so swapping it in does not touch a single line of UI code.
-//
-// To go live:
-//   1. Deploy contracts/MirrorwrightContract.py (see scripts/deploy.mjs).
-//   2. Set NEXT_PUBLIC_MIRROR_MODE=contract and NEXT_PUBLIC_MIRROR_CONTRACT=0x...
-//   3. Optionally set NEXT_PUBLIC_MIRROR_NETWORK (studionet | bradbury | localnet).
-//
-// Identity model: reads are open to everyone through a read-only client. That
-// client still needs an account attached, because genlayer-js throws
-// "No account set. Configure the client with an account or pass an account to
-// this function." when readContract is called with no account. For reads we
-// attach a throwaway ephemeral account (a freshly generated key that never
-// signs a write and is never persisted), so viewing existing reflections never
-// requires a wallet and never hits the account error. Writing still requires
-// the visitor to connect their own browser wallet (MetaMask with the GenLayer
-// Snap). The deploy key in .env.deploy is server-side only.
-
+const PENDING_KEY = "promptshield.contract.pending.v2";
+const ACCEPTED = TransactionStatus.ACCEPTED;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type AnyClient = ReturnType<typeof createClient>;
 
-const ACCEPTED = TransactionStatus.ACCEPTED;
-const IDENTITY_PREF_STORAGE = "mirrorwright.identity.mode";
+type ReceiptLike = {
+  txExecutionResultName?: string;
+  consensus_data?: {
+    leader_receipt?: Array<{ execution_result?: string; error?: string | null }>;
+  };
+};
 
 export interface ContractAdapterConfig {
   contractAddress: string;
   network?: string;
 }
 
-function pickChain(network?: string) {
-  switch ((network ?? "studionet").toLowerCase()) {
+function pickChain(network = "studionet") {
+  switch (network.toLowerCase()) {
     case "bradbury":
     case "testnet-bradbury":
     case "testnetbradbury":
       return testnetBradbury;
     case "localnet":
       return localnet;
-    case "studionet":
     default:
       return studionet;
   }
 }
 
-function networkName(network?: string): "studionet" | "testnetBradbury" | "localnet" {
-  switch ((network ?? "studionet").toLowerCase()) {
-    case "bradbury":
-    case "testnet-bradbury":
-    case "testnetbradbury":
-      return "testnetBradbury";
-    case "localnet":
-      return "localnet";
-    default:
-      return "studionet";
-  }
+function networkName(network = "studionet"): "studionet" | "testnetBradbury" | "localnet" {
+  if (network.toLowerCase() === "localnet") return "localnet";
+  return /bradbury/i.test(network) ? "testnetBradbury" : "studionet";
 }
 
-// Recursively turn Maps (genlayer calldata) into plain objects so the UI can
-// read fields with dot access regardless of how the value was decoded.
 function toPlain(value: unknown): any {
-  if (value instanceof Map) {
-    const obj: Record<string, unknown> = {};
-    for (const [k, v] of value.entries()) obj[String(k)] = toPlain(v);
-    return obj;
-  }
+  if (value instanceof Map) return Object.fromEntries(Array.from(value.entries(), ([key, item]) => [String(key), toPlain(item)]));
   if (Array.isArray(value)) return value.map(toPlain);
   if (typeof value === "bigint") return Number(value);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, toPlain(item)]));
   return value;
 }
 
-export class ContractAdapter implements MirrorAdapter {
+function normalizeResult(value: unknown): PromptShieldResult | null {
+  const item = toPlain(value);
+  if (!item || typeof item !== "object" || !item.request_id) return null;
+  const verdict = String(item.verdict) as PromptShieldVerdict;
+  const confidence = String(item.confidence) as PromptShieldConfidence;
+  if (!["safe", "suspicious", "dangerous"].includes(verdict) || !["low", "medium", "high"].includes(confidence)) return null;
+  return {
+    requestId: String(item.request_id),
+    verdict,
+    confidence,
+    detectedAttackCategories: Array.isArray(item.detected_attack_categories) ? item.detected_attack_categories.map(String) : [],
+    groundedExplanation: String(item.grounded_explanation ?? ""),
+    suspiciousExcerpts: Array.isArray(item.suspicious_excerpts) ? item.suspicious_excerpts.map(String) : [],
+    createdAt: Number(item.created_at ?? 0),
+  };
+}
+
+function makeRequestId(): string {
+  return `ps-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function parsePending(raw: string | null): PendingPromptShieldTransaction | null {
+  if (!raw) return null;
+  try {
+    const item = JSON.parse(raw) as Partial<PendingPromptShieldTransaction>;
+    if (item.app !== PROMPTSHIELD_APP || typeof item.request !== "string" || typeof item.hash !== "string" ||
+      typeof item.account !== "string" || typeof item.timestamp !== "number" || typeof item.contentHash !== "string") return null;
+    return item as PendingPromptShieldTransaction;
+  } catch {
+    return null;
+  }
+}
+
+function receiptError(receipt: unknown): string | null {
+  const item = toPlain(receipt) as ReceiptLike;
+  const leaders = item?.consensus_data?.leader_receipt ?? [];
+  const failed = leaders.find((leader) => leader.execution_result === ExecutionResult.FINISHED_WITH_ERROR || Boolean(leader.error));
+  if (failed) return failed.error?.trim() || "The contract execution finished with an error.";
+  if (item?.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) return "The contract execution finished with an error.";
+  return null;
+}
+
+export class ContractAdapter implements PromptShieldAdapter {
   readonly mode = "contract" as const;
   private readonly config: ContractAdapterConfig;
   private readonly chain: ReturnType<typeof pickChain>;
-  private client: AnyClient | null = null;
   private readClient: AnyClient | null = null;
+  private walletClient: AnyClient | null = null;
   private walletAddress: string | null = null;
-  private usingWallet = false;
 
   constructor(config: ContractAdapterConfig) {
     this.config = config;
     this.chain = pickChain(config.network);
   }
 
-  // -- identity --------------------------------------------------------
-
-  // Read-only client. It carries a throwaway ephemeral account so view calls
-  // never trip genlayer-js's "No account set" error. This account only exists
-  // to satisfy the client; it never signs a write and is never stored. If a
-  // wallet is connected we reuse that client so reads share the same account.
-  private getReadClient(): AnyClient {
-    if (this.usingWallet && this.client) return this.client;
-    if (this.readClient) return this.readClient;
-    const account = createAccount(generatePrivateKey());
-    this.readClient = createClient({ chain: this.chain, account }) as AnyClient;
-    return this.readClient;
-  }
-
-  hasInjectedWallet(): boolean {
-    return typeof window !== "undefined" && Boolean((window as any).ethereum);
-  }
-
-  async connectWallet(): Promise<string> {
-    if (typeof window === "undefined") {
-      throw new Error("Wallet connect is only available in the browser.");
-    }
-    const eth = (window as any).ethereum;
-    if (!eth) {
-      throw new Error("No browser wallet found. Install MetaMask with the GenLayer Snap to connect.");
-    }
-
-    // 1. Unlock MetaMask and get the selected address FIRST.
-    let addr: string | undefined;
-    try {
-      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
-      addr = accounts?.[0];
-    } catch (e: any) {
-      if (e?.code === 4001) throw new Error("Wallet connection was rejected.");
-      throw new Error("Could not reach MetaMask. Unlock it and try again.");
-    }
-    if (!addr) throw new Error("MetaMask returned no account. Unlock it and try again.");
-
-    // 2. Create the client WITH the account address up front. genlayer-js
-    //    validates client.account on every write ("No account set" otherwise),
-    //    and setting it after construction does not take, so it must be passed
-    //    to createClient here. Signing still routes through the GenLayer Snap.
-    const client = createClient({
-      chain: this.chain,
-      account: addr as `0x${string}`,
-    }) as AnyClient;
-
-    // 3. Activate the GenLayer Snap and switch the network.
-    try {
-      await client.connect(networkName(this.config.network));
-    } catch (e: any) {
-      if (e?.code === 4001) throw new Error("The GenLayer Snap connection was rejected in MetaMask.");
-      const detail = String(e?.message ?? e).slice(0, 200);
-      throw new Error(
-        "Could not activate the GenLayer Snap in MetaMask. Make sure MetaMask is unlocked and allows Snaps, then approve the install. Details: " +
-          detail,
-      );
-    }
-
-    this.client = client;
-    this.walletAddress = addr;
-    this.usingWallet = true;
-    window.localStorage.setItem(IDENTITY_PREF_STORAGE, "wallet");
-    return addr;
-  }
-
-  disconnectWallet(): void {
-    this.client = null;
-    this.walletAddress = null;
-    this.usingWallet = false;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(IDENTITY_PREF_STORAGE);
-    }
-  }
-
-  isUsingWallet(): boolean {
-    return this.usingWallet;
-  }
-
-  get ownerAddress(): string | null {
-    return this.usingWallet ? this.walletAddress : null;
-  }
-
-  getIdentityAddress(): string | null {
-    return this.ownerAddress;
-  }
-
   private get address(): `0x${string}` {
     return this.config.contractAddress as `0x${string}`;
   }
 
-  // -- low level -------------------------------------------------------
+  private getReadClient(): AnyClient {
+    if (!this.readClient) this.readClient = createClient({ chain: this.chain, account: createAccount(generatePrivateKey()) });
+    return this.readClient;
+  }
+
+  hasInjectedWallet(): boolean {
+    return typeof window !== "undefined" && Boolean((window as Window & { ethereum?: unknown }).ethereum);
+  }
+
+  async connectWallet(): Promise<string> {
+    if (typeof window === "undefined") throw new Error("Wallet connection is only available in the browser.");
+    const ethereum = (window as Window & { ethereum?: { request(args: { method: string }): Promise<string[]> } }).ethereum;
+    if (!ethereum) throw new Error("No browser wallet found. Install MetaMask with the GenLayer Snap.");
+    let accounts: string[];
+    try {
+      accounts = await ethereum.request({ method: "eth_requestAccounts" });
+    } catch (error: any) {
+      if (error?.code === 4001) throw new Error("Wallet connection was rejected.");
+      throw new Error("Could not connect to the browser wallet.");
+    }
+    const selected = accounts[0];
+    if (!selected) throw new Error("The wallet returned no account.");
+    const client = createClient({ chain: this.chain, account: selected as `0x${string}` });
+    await client.connect(networkName(this.config.network));
+    this.walletClient = client;
+    this.walletAddress = selected;
+    return selected;
+  }
+
+  disconnectWallet(): void {
+    this.walletClient = null;
+    this.walletAddress = null;
+  }
+
+  getIdentityAddress(): string | null {
+    return this.walletAddress;
+  }
+
+  getPending(): PendingPromptShieldTransaction | null {
+    if (typeof window === "undefined") return null;
+    return parsePending(window.localStorage.getItem(PENDING_KEY));
+  }
+
+  private savePending(pending: PendingPromptShieldTransaction): void {
+    if (typeof window !== "undefined") window.localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  }
+
+  private clearPending(): void {
+    if (typeof window !== "undefined") window.localStorage.removeItem(PENDING_KEY);
+  }
+
+  private explorerUrl(hash: string): string | undefined {
+    const base = this.chain.blockExplorers?.default.url?.replace(/\/$/, "");
+    return base ? `${base}/tx/${hash}` : undefined;
+  }
+
+  private state(pending: PendingPromptShieldTransaction, phase: TransactionState["phase"], message: string): TransactionState {
+    return { phase, message, requestId: pending.request, hash: pending.hash, sender: pending.account, explorerUrl: this.explorerUrl(pending.hash) };
+  }
 
   private async read<T>(functionName: string, args: unknown[] = []): Promise<T> {
-    const client = this.getReadClient();
-    const raw = await client.readContract({
-      address: this.address,
-      functionName,
-      args: args as any,
+    const value = await this.getReadClient().readContract({ address: this.address, functionName, args: args as any });
+    return toPlain(value) as T;
+  }
+
+  private async waitForPersisted(pending: PendingPromptShieldTransaction, onState?: (state: TransactionState) => void): Promise<PromptShieldResult> {
+    onState?.(this.state(pending, "pending", "Waiting for validator consensus."));
+    const receipt = await (this.walletClient ?? this.getReadClient()).waitForTransactionReceipt({
+      hash: pending.hash as Hash,
+      status: ACCEPTED,
+      interval: 5000,
+      retries: 180,
     });
-    return toPlain(raw) as T;
-  }
-
-  private requireWalletClient(): AnyClient {
-    if (!this.usingWallet || !this.client) {
-      throw new Error("Breathe on the glass with your wallet to do this.");
+    const failure = receiptError(receipt);
+    if (failure) {
+      this.clearPending();
+      throw new Error(failure);
     }
-    return this.client;
-  }
-
-  private async writeAndWait(functionName: string, args: unknown[]): Promise<any> {
-    const client = this.requireWalletClient();
-    // Bradbury occasionally reverts a tx transiently at the consensus layer.
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const hash = await client.writeContract({
-          address: this.address,
-          functionName,
-          args: args as any,
-          value: 0n,
-        });
-        return await client.waitForTransactionReceipt({
-          hash,
-          status: ACCEPTED,
-          interval: 6000,
-          retries: 150,
-        });
-      } catch (e) {
-        lastErr = e;
-        const msg = String((e as any)?.message ?? e);
-        if (!/revert|timed out|temporarily|429/i.test(msg)) throw e;
-        await new Promise((r) => setTimeout(r, 8000));
+    onState?.(this.state(pending, "accepted", "Transaction accepted. Verifying canonical state."));
+    onState?.(this.state(pending, "persisting", "Polling the contract for the persisted result."));
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const result = await this.getResult(pending.account, pending.request);
+      if (result) {
+        this.clearPending();
+        onState?.(this.state(pending, "complete", "Canonical result persisted."));
+        return result;
       }
+      await sleep(3000);
     }
-    throw lastErr;
+    throw new Error("Consensus was accepted, but the canonical result is not readable yet. Recovery will resume on reload.");
   }
 
-  // -- writes ----------------------------------------------------------
+  async submit(payload: PromptShieldPayload, options: SubmitPromptShieldOptions = {}): Promise<PromptShieldResult> {
+    validatePayload(payload);
+    const contentHash = await hashPayload(payload);
+    if (!this.walletClient || !this.walletAddress) {
+      options.onState?.({ phase: "connecting", message: "Connect a wallet before submitting." });
+      await this.connectWallet();
+    }
+    const account = this.walletAddress!;
+    const existing = this.getPending();
+    if (existing) {
+      if (existing.account.toLowerCase() !== account.toLowerCase()) throw new Error("A pending PromptShield request belongs to a different wallet account.");
+      if (existing.contentHash !== contentHash) throw new Error("A different PromptShield request is already pending. Recovery will not issue a second write.");
+      return this.waitForPersisted(existing, options.onState);
+    }
+    const request = options.requestId ?? makeRequestId();
+    const timestamp = Date.now();
+    options.onState?.({ phase: "submitting", requestId: request, sender: account, message: "Submitting exactly one contract write." });
 
-  async openMirror(): Promise<Mirror> {
-    await this.writeAndWait("open_mirror", [Date.now()]);
-    const mine = await this.getMyMirror();
-    if (!mine) throw new Error("The mirror opened but could not be read back.");
-    return mine;
-  }
-
-  async feedFragment(input: FeedFragmentInput): Promise<FeedResult> {
-    const receipt = await this.writeAndWait("feed_fragment", [
-      input.mirrorId,
-      input.text,
-      input.kind,
-      Date.now(),
-    ]);
-    const out = toPlain(this.extractReturn<any>(receipt)) ?? {};
-    return {
-      mirrorId: input.mirrorId,
-      fragmentId: out.fragmentId ?? "",
-      relation: (out.relation ?? "extends") as FeedResult["relation"],
-      coherence: Number(out.coherence ?? 0),
-      state: (out.state ?? "forming") as FeedResult["state"],
-      clarity: Number(out.clarity ?? 0),
-      note: out.note ?? "A shard settled.",
+    // This is intentionally the adapter's only writeContract call. Recovery
+    // always resumes from the stored hash and never resubmits the transaction.
+    const hash = await this.walletClient!.writeContract({
+      address: this.address,
+      functionName: "submit_check",
+      args: [request, serializePayload(payload), timestamp] as any,
+      value: 0n,
+    });
+    const pending: PendingPromptShieldTransaction = {
+      app: PROMPTSHIELD_APP,
+      request,
+      hash: String(hash),
+      account,
+      timestamp,
+      contentHash,
     };
+    this.savePending(pending);
+    return this.waitForPersisted(pending, options.onState);
   }
 
-  async ask(input: AskInput): Promise<AskResult> {
-    const receipt = await this.writeAndWait("ask", [input.mirrorId, input.question, "", Date.now()]);
-    const out = toPlain(this.extractReturn<any>(receipt)) ?? {};
-    return {
-      mirrorId: input.mirrorId,
-      answerId: out.answerId ?? "",
-      question: out.question ?? input.question,
-      answer: out.answer ?? "",
-      stance: out.stance ?? "",
-      drawnFrom: Array.isArray(out.drawnFrom) ? out.drawnFrom : [],
-      heldBack: out.heldBack ?? "",
-      note: out.note ?? "It answered in your voice.",
-    };
-  }
-
-  async correct(input: CorrectInput): Promise<CorrectResult> {
-    const receipt = await this.writeAndWait("correct", [
-      input.mirrorId,
-      input.targetTrait,
-      input.correctionText,
-      Date.now(),
-    ]);
-    const out = toPlain(this.extractReturn<any>(receipt)) ?? {};
-    return {
-      mirrorId: input.mirrorId,
-      fragmentId: out.fragmentId ?? "",
-      dimmedTrait: out.dimmedTrait ?? "",
-      relation: (out.relation ?? "extends") as CorrectResult["relation"],
-      state: (out.state ?? "contested") as CorrectResult["state"],
-      clarity: Number(out.clarity ?? 0),
-      note: out.note ?? "This shard dimmed. The reflection reshaped.",
-    };
-  }
-
-  // -- reads -----------------------------------------------------------
-
-  async getMirror(mirrorId: string): Promise<Mirror | null> {
-    const mirror = await this.read<any>("get_mirror", [mirrorId]);
-    return mirror ? (mirror as Mirror) : null;
-  }
-
-  async getMyMirror(): Promise<Mirror | null> {
-    const owner = this.ownerAddress;
-    if (!owner) return null;
-    const mirror = await this.read<any>("get_mirror_by_owner", [owner]);
-    return mirror ? (mirror as Mirror) : null;
-  }
-
-  async getPersona(mirrorId: string): Promise<Persona | null> {
-    const persona = await this.read<any>("get_persona", [mirrorId]);
-    return persona ? (persona as Persona) : null;
-  }
-
-  async getFragments(mirrorId: string): Promise<Fragment[]> {
-    const all: Fragment[] = [];
-    const limit = 20;
-    let offset = 0;
-    for (;;) {
-      const page = await this.read<Fragment[]>("get_fragments", [mirrorId, offset, limit]);
-      if (!page || page.length === 0) break;
-      all.push(...page);
-      if (page.length < limit) break;
-      offset += limit;
+  async recoverPending(onState?: (state: TransactionState) => void): Promise<PromptShieldResult | null> {
+    const pending = this.getPending();
+    if (!pending) return null;
+    if (this.walletAddress && pending.account.toLowerCase() !== this.walletAddress.toLowerCase()) {
+      throw new Error("The pending PromptShield request belongs to a different wallet account.");
     }
-    return all;
+    return this.waitForPersisted(pending, onState);
   }
 
-  async getAnswers(mirrorId: string): Promise<Answer[]> {
-    const all: Answer[] = [];
-    const limit = 20;
-    let offset = 0;
-    for (;;) {
-      const page = await this.read<Answer[]>("get_answers", [mirrorId, offset, limit]);
-      if (!page || page.length === 0) break;
-      all.push(...page);
-      if (page.length < limit) break;
-      offset += limit;
-    }
-    return all;
+  async getResult(sender: string | null, requestId: string): Promise<PromptShieldResult | null> {
+    if (!sender) return null;
+    return normalizeResult(await this.read<unknown>("get_result", [sender, requestId]));
   }
 
-  // -- receipt helpers -------------------------------------------------
+  async getResults(offset = 0, limit = 20): Promise<PromptShieldResult[]> {
+    const values = await this.read<unknown[]>("get_results", [offset, Math.min(50, Math.max(0, limit))]);
+    return (Array.isArray(values) ? values : []).map(normalizeResult).filter((item): item is PromptShieldResult => Boolean(item));
+  }
 
-  private extractReturn<T>(receipt: any): T | undefined {
-    if (!receipt) return undefined;
-    const candidates = [
-      receipt?.consensus_data?.leader_receipt?.[0]?.result,
-      receipt?.consensus_data?.leader_receipt?.result,
-      receipt?.result,
-      receipt?.returnValue,
-      receipt?.data,
-    ];
-    for (const c of candidates) {
-      if (c !== undefined && c !== null) return toPlain(c) as T;
-    }
-    return undefined;
+  async getSummary(): Promise<PromptShieldSummary> {
+    const value = await this.read<any>("get_summary");
+    return { total: Number(value?.total ?? 0), safe: Number(value?.safe ?? 0), suspicious: Number(value?.suspicious ?? 0), dangerous: Number(value?.dangerous ?? 0) };
   }
 }

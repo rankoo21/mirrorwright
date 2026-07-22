@@ -3,139 +3,147 @@
 @tailwind utilities;
 
 :root {
-  /* A near-black room lit only by the glass. */
-  --room-black: #060607;
-  --obsidian: #0e0f12;
-  --mercury: #c7cdd4;
-  --breath-white: #eff4f8;
-  --smoke: #4a4e55;
-  --teal-shadow: #14242a;
-  --ember: #e8a36a;
-  --violet-glass: #2a2336;
+  --ink: #0a0a08;
+  --panel: #11110e;
+  --panel-raised: #171713;
+  --line: #36362d;
+  --line-soft: #25251f;
+  --paper: #f1efe6;
+  --muted: #9f9d91;
+  --signal: #f3aa2b;
+  --safe: #87b58a;
+  --danger: #e76e55;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-html,
+* { box-sizing: border-box; }
+html { background: var(--ink); color-scheme: dark; scroll-behavior: smooth; }
 body {
-  background: var(--room-black);
-  color: var(--mercury);
   margin: 0;
-  padding: 0;
-  min-height: 100%;
-  font-family: var(--font-body), system-ui, sans-serif;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(243,170,43,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243,170,43,.025) 1px, transparent 1px),
+    var(--ink);
+  background-size: 48px 48px;
+  color: var(--paper);
+  font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
+button, textarea, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--signal); color: var(--ink); }
+*:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.skip-link {
+  position: fixed; top: 12px; left: 12px; z-index: 100; padding: 10px 14px;
+  background: var(--signal); color: var(--ink); font-weight: 800; transform: translateY(-160%);
+}
+.skip-link:focus { transform: translateY(0); }
 
-/* The dark room: a deep vignette with the faintest cold light at center, as if
-   a single mirror is the only source. */
-.room-vignette {
-  background:
-    radial-gradient(120% 90% at 50% 38%, rgba(199, 205, 212, 0.07) 0%, rgba(20, 36, 42, 0.05) 26%, transparent 60%),
-    radial-gradient(140% 120% at 50% 50%, transparent 40%, rgba(6, 6, 7, 0.7) 100%),
-    var(--room-black);
+.shell { width: min(1480px, 100%); margin: 0 auto; padding: 0 28px 64px; }
+.topbar {
+  min-height: 78px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--line); gap: 24px;
 }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 820; letter-spacing: -.04em; font-size: 1.15rem; }
+.brand-mark { width: 24px; height: 28px; border: 2px solid var(--signal); position: relative; }
+.brand-mark::after { content: ""; position: absolute; left: 5px; right: 5px; top: 8px; height: 2px; background: var(--signal); box-shadow: 0 6px 0 var(--signal); }
+.status-line { display: flex; align-items: center; gap: 9px; color: var(--muted); font: 700 .7rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.status-dot { width: 7px; height: 7px; background: var(--safe); border-radius: 50%; box-shadow: 0 0 0 4px rgba(135,181,138,.1); }
 
-/* Faint dust in a dark room. */
-.room-dust {
-  background-image:
-    radial-gradient(1px 1px at 20% 30%, rgba(199, 205, 212, 0.25), transparent),
-    radial-gradient(1px 1px at 70% 60%, rgba(199, 205, 212, 0.18), transparent),
-    radial-gradient(1px 1px at 40% 80%, rgba(199, 205, 212, 0.14), transparent),
-    radial-gradient(1px 1px at 85% 20%, rgba(199, 205, 212, 0.2), transparent),
-    radial-gradient(1px 1px at 55% 45%, rgba(199, 205, 212, 0.12), transparent);
-  background-size: 380px 380px, 520px 520px, 460px 460px, 600px 600px, 340px 340px;
+.hero { padding: 70px 0 44px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr); gap: 48px; align-items: end; }
+.eyebrow { color: var(--signal); font: 700 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .14em; margin: 0 0 18px; }
+h1 { margin: 0; max-width: 880px; font-size: clamp(2.7rem, 6vw, 6.8rem); line-height: .88; letter-spacing: -.075em; font-weight: 830; }
+.hero-copy { color: var(--muted); max-width: 480px; font-size: clamp(1rem, 1.5vw, 1.2rem); line-height: 1.6; margin: 0; }
+.meta-row { margin-top: 25px; display: flex; flex-wrap: wrap; gap: 8px; }
+.meta-chip { border: 1px solid var(--line); color: var(--muted); padding: 7px 10px; font: 650 .66rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.workbench { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, .75fr); border: 1px solid var(--line); background: var(--panel); }
+.input-zone { padding: clamp(22px, 3vw, 42px); border-right: 1px solid var(--line); }
+.output-zone { min-width: 0; background: var(--panel-raised); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+.section-index { color: var(--signal); font: 700 .68rem/1 var(--mono); letter-spacing: .12em; }
+h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.025em; }
+.field { margin-bottom: 23px; }
+.field-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 9px; }
+label { font-weight: 720; font-size: .9rem; }
+.counter { color: var(--muted); font: .68rem/1 var(--mono); }
+textarea {
+  width: 100%; resize: vertical; min-height: 132px; border: 1px solid var(--line); border-radius: 0;
+  background: var(--ink); color: var(--paper); padding: 16px; line-height: 1.55; transition: border-color 150ms, background 150ms;
 }
+textarea:hover { border-color: #555548; }
+textarea:focus { border-color: var(--signal); background: #0d0d0a; outline: none; box-shadow: inset 3px 0 0 var(--signal); }
+textarea[aria-invalid="true"] { border-color: var(--danger); }
+.error { color: #ff9a86; font-size: .78rem; margin: 7px 0 0; }
+.examples { display: flex; gap: 8px; flex-wrap: wrap; margin: -3px 0 26px; }
+.example-button, .secondary-button {
+  min-height: 44px; border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--paper); padding: 0 14px;
+  cursor: pointer; font: 700 .69rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em;
+}
+.example-button:hover, .secondary-button:hover { border-color: var(--signal); color: var(--signal); }
+.action-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.primary-button {
+  min-height: 52px; border: 1px solid var(--signal); border-radius: 0; background: var(--signal); color: var(--ink);
+  padding: 0 24px; cursor: pointer; font-weight: 820; letter-spacing: -.01em; box-shadow: 5px 5px 0 #5c3c09;
+}
+.primary-button:hover { transform: translate(-1px,-1px); box-shadow: 7px 7px 0 #5c3c09; }
+.primary-button:disabled { cursor: not-allowed; opacity: .55; transform: none; box-shadow: none; }
+.wallet-note { color: var(--muted); font: .7rem/1.45 var(--mono); max-width: 320px; }
+.phase-panel { padding: 26px; border-bottom: 1px solid var(--line); }
+.phase-track { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 20px; }
+.phase { position: relative; padding-top: 18px; color: #66665c; font: 650 .59rem/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+.phase::before { content: ""; position: absolute; top: 0; left: 0; width: 8px; height: 8px; border: 1px solid #555548; background: var(--panel-raised); z-index: 2; }
+.phase:not(:last-child)::after { content: ""; position: absolute; top: 3px; left: 8px; width: calc(100% - 8px); height: 1px; background: var(--line); }
+.phase.done { color: var(--paper); }
+.phase.done::before { background: var(--signal); border-color: var(--signal); }
+.tx-message { min-height: 20px; color: var(--muted); font-size: .78rem; margin: 18px 0 0; }
+.tx-link { display: block; color: var(--signal); margin-top: 8px; font: .68rem/1.4 var(--mono); overflow-wrap: anywhere; }
+.result { padding: 28px; }
+.empty { min-height: 320px; display: grid; place-content: center; color: var(--muted); text-align: center; padding: 30px; }
+.empty-code { color: var(--line); font: 800 4.5rem/1 var(--mono); margin-bottom: 14px; }
+.verdict { display: inline-flex; border: 1px solid currentColor; padding: 7px 10px; font: 800 .7rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.verdict.safe { color: var(--safe); }.verdict.suspicious { color: var(--signal); }.verdict.dangerous { color: var(--danger); }
+.result-title { margin: 20px 0 8px; font-size: 1.7rem; letter-spacing: -.04em; }
+.result-copy { color: var(--muted); line-height: 1.6; margin: 0; }
+.result-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); margin: 24px 0; border: 1px solid var(--line); }
+.result-meta > div { background: var(--panel-raised); padding: 15px; }
+.kicker { display: block; color: var(--muted); font: 650 .61rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+.finding { border-top: 1px solid var(--line); padding: 15px 0; }
+.finding-category { color: var(--signal); font: 650 .67rem/1 var(--mono); text-transform: uppercase; }
+.finding blockquote { margin: 10px 0 0; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.checks { display: flex; gap: 7px; flex-wrap: wrap; padding-top: 16px; }
+.check { border: 1px solid var(--line); color: var(--muted); padding: 6px 8px; font: .61rem/1.2 var(--mono); }
 
-/* Etched text: thin, cold, as if scratched into silvered glass. */
-.etched {
-  color: var(--mercury);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font-size: 0.66rem;
-  opacity: 0.66;
-}
+.ledger { margin-top: 34px; display: grid; grid-template-columns: 280px 1fr; border-top: 1px solid var(--line); padding-top: 34px; gap: 34px; }
+.summary-block p { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.summary-block h2 { margin-top: 8px; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); }
+.summary-grid > div { padding: 18px; border-right: 1px solid var(--line); }
+.summary-grid > div:last-child { border: 0; }
+.summary-grid strong { display: block; font: 800 1.8rem/1 var(--mono); }
+.summary-grid span { display: block; margin-top: 8px; color: var(--muted); font: .65rem/1 var(--mono); text-transform: uppercase; }
+.recent-list { grid-column: 2; border: 1px solid var(--line); border-top: 0; }
+.recent-row { width: 100%; min-height: 66px; display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 18px; padding: 10px 18px; text-align: left; border: 0; border-bottom: 1px solid var(--line-soft); background: var(--panel); color: var(--paper); cursor: pointer; }
+.recent-row:last-child { border-bottom: 0; }.recent-row:hover { background: var(--panel-raised); }
+.recent-explanation { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .82rem; }
+.recent-time { color: var(--muted); font: .65rem/1 var(--mono); }
+.no-history { color: var(--muted); padding: 22px; margin: 0; }
+footer { margin-top: 70px; border-top: 1px solid var(--line); padding-top: 20px; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font: .65rem/1.4 var(--mono); text-transform: uppercase; letter-spacing: .07em; }
 
-.etched-line {
-  font-family: var(--font-display), Georgia, serif;
-  color: var(--breath-white);
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 18px rgba(199, 205, 212, 0.18);
+@media (max-width: 980px) {
+  .hero { grid-template-columns: 1fr; gap: 24px; }.hero-copy { max-width: 680px; }
+  .workbench { grid-template-columns: 1fr; }.input-zone { border-right: 0; border-bottom: 1px solid var(--line); }
+  .ledger { grid-template-columns: 1fr; }.recent-list { grid-column: 1; }
 }
-
-/* The twin's own voice, marked with rare ember warmth (and never by color
-   alone; position and labels also carry the meaning). */
-.voice-ember {
-  color: var(--ember);
-  text-shadow: 0 0 22px rgba(232, 163, 106, 0.28);
+@media (max-width: 640px) {
+  .shell { padding: 0 14px 40px; }.topbar { min-height: 66px; }.status-line { font-size: .6rem; }
+  .hero { padding: 48px 0 30px; }.workbench { margin-inline: -14px; border-left: 0; border-right: 0; }
+  .input-zone, .phase-panel, .result { padding: 20px 14px; }.summary-grid { grid-template-columns: 1fr 1fr; }
+  .summary-grid > div:nth-child(2) { border-right: 0; }.summary-grid > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .recent-row { grid-template-columns: 92px 1fr; gap: 10px; }.recent-time { display: none; }.verdict { font-size: .6rem; }
+  footer { flex-direction: column; }.phase { font-size: .5rem; overflow: hidden; }.result-meta { grid-template-columns: 1fr; }
 }
-
-/* The thin silver mirror frame. */
-.silver-frame {
-  border: 1px solid rgba(199, 205, 212, 0.16);
-  box-shadow:
-    inset 0 0 60px rgba(20, 36, 42, 0.5),
-    inset 0 0 1px rgba(239, 244, 248, 0.4),
-    0 0 80px rgba(0, 0, 0, 0.6);
-}
-
-/* The reflective surface itself: cold mercury sheen with a faint violet tint. */
-.glass-surface {
-  background:
-    linear-gradient(160deg, rgba(42, 35, 54, 0.28) 0%, rgba(14, 15, 18, 0.6) 38%, rgba(20, 36, 42, 0.35) 100%),
-    radial-gradient(80% 60% at 50% 30%, rgba(199, 205, 212, 0.08), transparent 70%);
-  backdrop-filter: blur(2px);
-}
-
-/* Breath fog overlay that drifts across the glass at idle. */
-.breath-fog {
-  background: radial-gradient(60% 40% at 50% 45%, rgba(239, 244, 248, 0.14), transparent 70%);
-  mix-blend-mode: screen;
-  pointer-events: none;
-}
-
-/* The writing slit glow at the base of the mirror. */
-.slit-glow {
-  box-shadow:
-    0 0 24px rgba(199, 205, 212, 0.3),
-    0 0 60px rgba(141, 220, 255, 0.12);
-}
-
-/* Custom thin scrollbar for The Depths pool. */
-.pool-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.pool-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.pool-scroll::-webkit-scrollbar-thumb {
-  background: rgba(199, 205, 212, 0.16);
-  border-radius: 999px;
-}
-
-/* Focus states for accessibility against dark glass. */
-*:focus-visible {
-  outline: 2px solid rgba(141, 220, 255, 0.7);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-/* A shard of text drifting behind the glass. */
-.shard {
-  font-family: var(--font-display), Georgia, serif;
-  color: var(--mercury);
-  white-space: nowrap;
-  user-select: none;
-  pointer-events: none;
-}
-
-.text-balance {
-  text-wrap: balance;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.08s !important;
-  }
+  html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

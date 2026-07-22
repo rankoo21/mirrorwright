@@ -1,16 +1,16 @@
 {
-  "name": "mirrorwright",
+  "name": "promptshield",
   "version": "0.1.0",
   "private": true,
-  "description": "A mirror learning to be you.",
+  "description": "Consensus prompt-injection and data-exfiltration classification on GenLayer.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
-    "deploy": "node scripts/deploy.mjs",
-    "livecheck": "node scripts/livecheck.mjs"
+    "lint:contract": "genvm-lint check contracts/PromptShieldContract.py --json",
+    "test:direct": "python -m pytest tests/direct/ -p gltest_direct -q"
   },
   "dependencies": {
     "@react-three/fiber": "^8.16.8",

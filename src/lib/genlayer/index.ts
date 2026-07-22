@@ -1,28 +1,24 @@
-import type { MirrorAdapter } from "./types";
-import { MockAdapter } from "./mockAdapter";
+import type { PromptShieldAdapter } from "./types";
 import { ContractAdapter } from "./contractAdapter";
+import { MockAdapter } from "./mockAdapter";
 
-// Single place that decides which adapter is live. The UI imports getAdapter()
-// and never imports a concrete adapter directly.
-let cached: MirrorAdapter | null = null;
+let cached: PromptShieldAdapter | null = null;
 
-export function getAdapter(): MirrorAdapter {
+export function getPromptShieldAdapter(): PromptShieldAdapter {
   if (cached) return cached;
 
-  const mode = process.env.NEXT_PUBLIC_MIRROR_MODE ?? "mock";
-  const contractAddress = process.env.NEXT_PUBLIC_MIRROR_CONTRACT ?? "";
-  const network = process.env.NEXT_PUBLIC_MIRROR_NETWORK ?? "studionet";
+  const mode = process.env.NEXT_PUBLIC_PROMPTSHIELD_MODE ?? "mock";
+  const contractAddress = process.env.NEXT_PUBLIC_PROMPTSHIELD_CONTRACT ?? "";
+  const network = process.env.NEXT_PUBLIC_PROMPTSHIELD_NETWORK ?? "studionet";
 
-  if (mode === "contract" && contractAddress) {
-    cached = new ContractAdapter({ contractAddress, network });
-  } else {
-    cached = new MockAdapter();
-  }
+  cached = mode === "contract" && contractAddress
+    ? new ContractAdapter({ contractAddress, network })
+    : new MockAdapter();
   return cached;
 }
 
-export function getAdapterMode(): "mock" | "contract" {
-  return getAdapter().mode;
+export function getPromptShieldMode(): "mock" | "contract" {
+  return getPromptShieldAdapter().mode;
 }
 
 export * from "./types";

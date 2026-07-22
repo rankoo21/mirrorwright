@@ -23,7 +23,7 @@ import { TransactionStatus } from "genlayer-js/types";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const envPath = join(root, ".env.deploy");
-const contractPath = join(root, "contracts", "MirrorwrightContract.py");
+const contractPath = join(root, "contracts", "PromptShieldContract.py");
 
 function parseEnv(path) {
   const out = {};
@@ -53,10 +53,10 @@ function pickChain(name) {
 
 function writeBackAddress(path, address) {
   let text = existsSync(path) ? readFileSync(path, "utf8") : "";
-  if (/^MIRROR_CONTRACT_ADDRESS=.*$/m.test(text)) {
-    text = text.replace(/^MIRROR_CONTRACT_ADDRESS=.*$/m, `MIRROR_CONTRACT_ADDRESS=${address}`);
+  if (/^PROMPTSHIELD_CONTRACT_ADDRESS=.*$/m.test(text)) {
+    text = text.replace(/^PROMPTSHIELD_CONTRACT_ADDRESS=.*$/m, `PROMPTSHIELD_CONTRACT_ADDRESS=${address}`);
   } else {
-    text += (text.endsWith("\n") || text === "" ? "" : "\n") + `MIRROR_CONTRACT_ADDRESS=${address}\n`;
+    text += (text.endsWith("\n") || text === "" ? "" : "\n") + `PROMPTSHIELD_CONTRACT_ADDRESS=${address}\n`;
   }
   writeFileSync(path, text);
 }
@@ -82,7 +82,7 @@ async function main() {
   const client = createClient(clientOpts);
 
   const code = readFileSync(contractPath);
-  console.log("Deploying MirrorwrightContract...");
+  console.log("Deploying PromptShieldContract...");
 
   const txHash = await client.deployContract({ code, args: [] });
   console.log(`Deploy tx: ${txHash}`);
@@ -110,15 +110,15 @@ async function main() {
   }
 
   console.log("");
-  console.log("Deployed MirrorwrightContract at:");
+  console.log("Deployed PromptShieldContract at:");
   console.log("  " + address);
   writeBackAddress(envPath, address);
 
   console.log("");
   console.log("Add these to your frontend env (.env.local) to go live:");
-  console.log(`  NEXT_PUBLIC_MIRROR_MODE=contract`);
-  console.log(`  NEXT_PUBLIC_MIRROR_CONTRACT=${address}`);
-  console.log(`  NEXT_PUBLIC_MIRROR_NETWORK=${networkName}`);
+  console.log(`  NEXT_PUBLIC_PROMPTSHIELD_MODE=contract`);
+  console.log(`  NEXT_PUBLIC_PROMPTSHIELD_CONTRACT=${address}`);
+  console.log(`  NEXT_PUBLIC_PROMPTSHIELD_NETWORK=${networkName}`);
 }
 
 main().catch((err) => {
