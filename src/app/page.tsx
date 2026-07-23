@@ -136,7 +136,14 @@ export default function Page() {
       <main className="shell" id="main-content">
         <header className="topbar">
           <div className="brand"><span className="brand-mark" aria-hidden="true" />PromptShield</div>
-          <div className="status-line"><span className="status-dot" />{mode === "mock" ? "Local simulation" : "GenLayer network"}</div>
+          <div className="topbar-right">
+            <div className="status-line"><span className="status-dot" />{mode === "mock" ? "Local simulation" : "GenLayer network"}</div>
+            {mode === "contract" && (
+              wallet
+                ? <span className="wallet-pill" title={wallet}>{truncate(wallet, 16)}</span>
+                : <button className="secondary-button" type="button" onClick={connect}>Connect wallet</button>
+            )}
+          </div>
         </header>
 
         <section className="hero" aria-labelledby="page-title">
@@ -146,7 +153,7 @@ export default function Page() {
 
         <section className="workbench" aria-label="Prompt security workbench">
           <form className="input-zone" onSubmit={submit} noValidate>
-            <div className="section-head"><div><span className="section-index">01 / INPUT</span><h2>Inspection envelope</h2></div>{mode === "contract" && !wallet && <button className="secondary-button" type="button" onClick={connect}>Connect wallet</button>}</div>
+            <div className="section-head"><div><span className="section-index">01 / INPUT</span><h2>Inspection envelope</h2></div></div>
             {mode === "mock" && <div className="examples" aria-label="Load example"><button type="button" className="example-button" onClick={() => setPayload(EXAMPLES.safe)}>Safe example</button><button type="button" className="example-button" onClick={() => setPayload(EXAMPLES.suspicious)}>Suspicious example</button><button type="button" className="example-button" onClick={() => setPayload(EXAMPLES.dangerous)}>Dangerous example</button></div>}
 
             <div className="field"><div className="field-head"><label htmlFor="trusted-rules">Trusted system rules</label><span className="counter">{payload.trustedSystemRules.length} / {PROMPTSHIELD_LIMITS.trustedSystemRules}</span></div><textarea ref={trustedRef} id="trusted-rules" maxLength={PROMPTSHIELD_LIMITS.trustedSystemRules} value={payload.trustedSystemRules} onChange={(event) => setField("trustedSystemRules", event.target.value)} aria-invalid={Boolean(errors.trustedSystemRules)} aria-describedby={errors.trustedSystemRules ? "trusted-error" : undefined} placeholder="Define the instructions and boundaries that must remain authoritative." />{errors.trustedSystemRules && <p className="error" id="trusted-error">{errors.trustedSystemRules}</p>}</div>

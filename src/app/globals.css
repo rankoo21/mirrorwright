@@ -49,7 +49,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .brand { display: flex; align-items: center; gap: 12px; font-weight: 820; letter-spacing: -.04em; font-size: 1.15rem; }
 .brand-mark { width: 24px; height: 28px; border: 2px solid var(--signal); position: relative; }
 .brand-mark::after { content: ""; position: absolute; left: 5px; right: 5px; top: 8px; height: 2px; background: var(--signal); box-shadow: 0 6px 0 var(--signal); }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
 .status-line { display: flex; align-items: center; gap: 9px; color: var(--muted); font: 700 .7rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.wallet-pill { min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid var(--signal); color: var(--signal); font: 700 .69rem/1 var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .status-dot { width: 7px; height: 7px; background: var(--safe); border-radius: 50%; box-shadow: 0 0 0 4px rgba(135,181,138,.1); }
 
 .hero { padding: 70px 0 44px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr); gap: 48px; align-items: end; }
